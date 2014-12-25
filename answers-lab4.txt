@@ -1,0 +1,10 @@
+Question 1
+MPBOOTPHYS这个宏的作用就是将内核的Linear Address转化为Physical Address。而起必须在mpentry.S中使用是因为BSP启动AP时候，不同于BSP启动时候的KERNBASE上4MB空间映射，内存地址的计算方式并不相同。
+
+Question 2
+在中断发生后拿kernel锁之前，原来environment的数据会被push到栈上，这时候如果共享kernel stack，就会出现保存现场状态出错。因此需要为每个CPU分配不同的内存栈。
+
+Question 3
+e指向的是内核地址空间，页表切换时不切换kernel的寻址空间的地址。
+
+Challenge见lab4.pdf

@@ -4,6 +4,7 @@
 #include <inc/memlayout.h>
 #include <inc/trap.h>
 
+#include <kern/picirq.h>
 
 
 ###################################################################
@@ -48,13 +49,13 @@
  */
 
 TRAPHANDLER_NOEC(t_divide, T_DIVIDE);	
-TRAPHANDLER(t_debug, T_DEBUG);	
-TRAPHANDLER(t_nmi, T_NMI);	
+TRAPHANDLER_NOEC(t_debug, T_DEBUG);	
+TRAPHANDLER_NOEC(t_nmi, T_NMI);	
 TRAPHANDLER_NOEC(t_brkpt, T_BRKPT);	
-TRAPHANDLER(t_oflow, T_OFLOW);	
-TRAPHANDLER(t_bound, T_BOUND);	
-TRAPHANDLER(t_illop, T_ILLOP);	
-TRAPHANDLER(t_device, T_DEVICE);	
+TRAPHANDLER_NOEC(t_oflow, T_OFLOW);	
+TRAPHANDLER_NOEC(t_bound, T_BOUND);	
+TRAPHANDLER_NOEC(t_illop, T_ILLOP);	
+TRAPHANDLER_NOEC(t_device, T_DEVICE);	
 TRAPHANDLER(t_dblflt, T_DBLFLT);	
 
 TRAPHANDLER(t_tss, T_TSS);	
@@ -63,10 +64,10 @@ TRAPHANDLER(t_stack, T_STACK);
 TRAPHANDLER(t_gpflt, T_GPFLT);	
 TRAPHANDLER(t_pgflt, T_PGFLT);	
 
-TRAPHANDLER(t_fperr, T_FPERR);	
+TRAPHANDLER_NOEC(t_fperr, T_FPERR);	
 TRAPHANDLER(t_align, T_ALIGN);	
-TRAPHANDLER(t_mchk, T_MCHK);	
-TRAPHANDLER(t_simderr, T_SIMDERR);	
+TRAPHANDLER_NOEC(t_mchk, T_MCHK);	
+TRAPHANDLER_NOEC(t_simderr, T_SIMDERR);	
 
 TRAPHANDLER_NOEC(t_irq0, IRQ_OFFSET + 0);	
 TRAPHANDLER_NOEC(t_irq1, IRQ_OFFSET + 1);	
@@ -109,7 +110,7 @@ sysenter_handler:
 //	movl %ebp, %ecx	
 //	sti	
 //	sysexit
-
+/*
 	pushl $GD_UD | 3
 	pushl %ebp
 	pushfl
@@ -132,7 +133,7 @@ sysenter_handler:
 	movl	%ebp, %ecx
 	movl	%esi, %edx
 	sysexit
-
+*/
 
 
 /*

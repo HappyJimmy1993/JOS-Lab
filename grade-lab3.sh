@@ -78,7 +78,10 @@ runtest1 faultwritekernel \
 	'  err  0x00000007.*' \
 	'.00001000. free env 00001000'
 
+<<<<<<< HEAD
+=======
 
+>>>>>>> lab3
 # runtest1 breakpoint \
 # 	'Welcome to the JOS kernel monitor!' \
 # 	'Incoming TRAP frame at 0xefbfffbc' \
