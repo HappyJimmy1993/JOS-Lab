@@ -10,6 +10,8 @@
 #include <kern/console.h>
 #include <kern/monitor.h>
 #include <kern/kdebug.h>
+#include <kern/trap.h>
+#include <kern/env.h>
 
 #define CMDBUF_SIZE	80	// enough for one VGA text line
 
@@ -26,7 +28,9 @@ static struct Command commands[] = {
 	{ "kerninfo", "Display information about the kernel", mon_kerninfo },
 	{ "backtrace", "Display the backtrace of the stack", mon_backtrace },
 	{ "time", "time [command] Display time(cycles) of command", mon_time },
-
+	{ "c", "Debug continue", mon_db_c },
+	{ "si", "Debug step", mon_db_si },
+	{ "x", "Debug print", mon_db_x },
 };
 #define NCOMMANDS (sizeof(commands)/sizeof(commands[0]))
 
@@ -118,10 +122,12 @@ overflow_me(void)
         start_overflow();
 }
 
+
 int
 mon_backtrace(int argc, char **argv, struct Trapframe *tf)
 {
 	// Your code here.
+
 	uint32_t bp = read_ebp();
 	uint32_t *ip;
 	struct Eipdebuginfo debuginfo;
@@ -142,6 +148,7 @@ mon_backtrace(int argc, char **argv, struct Trapframe *tf)
 
     overflow_me();
     cprintf("Backtrace success\n");
+
 	return 0;
 }
 
@@ -174,6 +181,87 @@ mon_time(int argc, char **argv, struct Trapframe *tf)
 }
 
 
+int
+mon_db_c(int argc, char** argv, struct Trapframe* tf)
+{
+	tf->tf_eflags = tf->tf_eflags & ~FL_TF;
+	return -1;
+}
+
+int
+mon_db_si(int argc, char** argv, struct Trapframe* tf)
+{
+	cprintf("tf_eip=%x\n", tf->tf_eip);
+	tf->tf_eflags = tf->tf_eflags | FL_TF;
+	return -1;
+}
+
+int
+mon_db_x(int argc, char** argv, struct Trapframe* tf)
+{
+	if(argc!=2)
+	{
+		cprintf("Usage: x 0x[point] \n");
+		return 0;
+	}
+
+		
+	//parse
+	unsigned int addr = 0;
+	char* str = argv[1];
+	
+	if(*(str++) != '0')
+	{
+		cprintf("Usage: x 0x[point] \n");
+		return 0;
+	}
+	if(*(str++) != 'x')
+	{
+		cprintf("Usage: x 0x[point] \n");
+		return 0;
+	}
+	
+	while(*str){
+		switch(*str){
+			case '0':
+			case '1':
+			case '2':
+			case '3':
+			case '4':
+			case '5':
+			case '6':
+			case '7':
+			case '8':
+			case '9':
+				addr = (addr<<4) | (*str - '0');
+				break;
+			case 'a':
+			case 'b':
+			case 'c':
+			case 'd':
+			case 'e':
+			case 'f':
+				addr = (addr<<4) | (*str + 10 - 'a');
+				break;
+			case 'A':
+			case 'B':
+			case 'C':
+			case 'D':
+			case 'E':
+			case 'F':
+				addr = (addr<<4) | (*str + 10 - 'A');
+				break;
+			default:
+				cprintf("Usage: x 0x[point(16)] \n");
+				return 0;
+		}
+		str++;
+	}
+	
+	cprintf("%d\n", *((unsigned int*)addr));
+	return 0;
+	
+}
 /***** Kernel monitor command interpreter *****/
 
 #define WHITESPACE "\t\r\n "
@@ -226,6 +314,8 @@ monitor(struct Trapframe *tf)
 	cprintf("Welcome to the JOS kernel monitor!\n");
 	cprintf("Type 'help' for a list of commands.\n");
 
+	if (tf != NULL)
+		print_trapframe(tf);
 
 	while (1) {
 		buf = readline("K> ");

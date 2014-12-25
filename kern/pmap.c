@@ -9,6 +9,7 @@
 
 #include <kern/pmap.h>
 #include <kern/kclock.h>
+#include <kern/env.h>
 
 // These variables are set by i386_detect_memory()
 size_t npages;			// Amount of physical memory (in pages)
@@ -18,7 +19,7 @@ static size_t npages_basemem;	// Amount of base memory (in pages)
 pde_t *kern_pgdir;		// Kernel's initial page directory
 struct Page *pages;		// Physical page state array
 static struct Page *page_free_list;	// Free list of physical pages
-static struct Page chunck_list;
+static struct Page *chunk_list;
 
 
 // --------------------------------------------------------------
@@ -162,6 +163,13 @@ mem_init(void)
 	// Your code goes here:
 	pages = boot_alloc(npages * sizeof(struct Page));
 
+
+	//////////////////////////////////////////////////////////////////////
+	// Make 'envs' point to an array of size 'NENV' of 'struct Env'.
+	// LAB 3: Your code here.
+	envs = boot_alloc(NENV * sizeof(struct Env));
+
+
 	//////////////////////////////////////////////////////////////////////
 	// Now that we've allocated the initial kernel data structures, we set
 	// up the list of free physical pages. Once we've done so, all further
@@ -190,6 +198,16 @@ mem_init(void)
 
 
 	//////////////////////////////////////////////////////////////////////
+	// Map the 'envs' array read-only by the user at linear address UENVS
+	// (ie. perm = PTE_U | PTE_P).
+	// Permissions:
+	//    - the new image at UENVS  -- kernel R, user R
+	//    - envs itself -- kernel RW, user NONE
+	// LAB 3: Your code here.
+	boot_map_region(kern_pgdir, UENVS, ROUNDUP(NENV * sizeof(struct Env), PGSIZE), PADDR(envs), PTE_U | PTE_P);
+
+
+	//////////////////////////////////////////////////////////////////////
 	// Use the physical memory that 'bootstack' refers to as the kernel
 	// stack.  The kernel stack grows down from virtual address KSTACKTOP.
 	// We consider the entire range from [KSTACKTOP-PTSIZE, KSTACKTOP)
@@ -202,7 +220,6 @@ mem_init(void)
 	// Your code goes here:
 	boot_map_region(kern_pgdir, (KSTACKTOP-KSTKSIZE), KSTKSIZE, PADDR(bootstack), PTE_W);
 
-
 	//////////////////////////////////////////////////////////////////////
 	// Map all of physical memory at KERNBASE.
 	// Ie.  the VA range [KERNBASE, 2^32) should map to
@@ -212,7 +229,6 @@ mem_init(void)
 	// Permissions: kernel RW, user NONE
 	// Your code goes here:
 	boot_map_region(kern_pgdir, KERNBASE, 0xFFFFFFFF - KERNBASE + 1, 0, PTE_W);
-
 
 	// Check that the initial page directory has been set up correctly.
 	check_kern_pgdir();
@@ -294,6 +310,7 @@ page_init(void)
 		page_free_list = &pages[i];		
 	}
 
+
 }
 
 //
@@ -333,6 +350,8 @@ page_alloc(int alloc_flags)
 //
 // Returns NULL if out of free memory.
 // Returns NULL if n <= 0
+//
+// Try to reuse the pages cached in the chuck list
 //
 // Hint: use page2kva and memset
 struct Page *
@@ -388,9 +407,9 @@ page_alloc_npages(int alloc_flags, int n)
 	return NULL;
 }
 
-// Return n continuous pages to chunck list. Do the following things:
+// Return n continuous pages to chunk list. Do the following things:
 //	1. Check whether the n pages int the list are continue, Return -1 on Error
-//	2. Add the pages to the chunck list.
+//	2. Add the pages to the chunk list
 //	
 //	Return 0 if everything ok
 int
@@ -491,6 +510,7 @@ page_realloc_npages(struct Page *pp, int old_n, int new_n)
 	memmove(page2kva(new_list),page2kva(pp),old_n*PGSIZE);
 	page_free_npages(pp,old_n);
 	return new_list;
+
 
 }
 
@@ -676,6 +696,64 @@ tlb_invalidate(pde_t *pgdir, void *va)
 	invlpg(va);
 }
 
+static uintptr_t user_mem_check_addr;
+
+//
+// Check that an environment is allowed to access the range of memory
+// [va, va+len) with permissions 'perm | PTE_P'.
+// Normally 'perm' will contain PTE_U at least, but this is not required.
+// 'va' and 'len' need not be page-aligned; you must test every page that
+// contains any of that range.  You will test either 'len/PGSIZE',
+// 'len/PGSIZE + 1', or 'len/PGSIZE + 2' pages.
+//
+// A user program can access a virtual address if (1) the address is below
+// ULIM, and (2) the page table gives it permission.  These are exactly
+// the tests you should implement here.
+//
+// If there is an error, set the 'user_mem_check_addr' variable to the first
+// erroneous virtual address.
+//
+// Returns 0 if the user program can access this range of addresses,
+// and -E_FAULT otherwise.
+//
+int
+user_mem_check(struct Env *env, const void *va, size_t len, int perm)
+{
+	// LAB 3: Your code here.
+	unsigned int* p;
+	bool breakFlag = 0;
+	perm = perm | PTE_U | PTE_P;
+	for(p = ROUNDDOWN((unsigned int*)va, PGSIZE); p < ROUNDUP((unsigned int*)(va + len), PGSIZE); p += PGSIZE){
+		pte_t* pte_p = pgdir_walk(env->env_pgdir, p, 0);
+		if(p > (unsigned int*)ULIM ||	//out of range
+			!pte_p ||	//page doesn't exist
+			((*pte_p) & perm) != perm)	//less perm than expected.
+		{
+			//sth is wrong.
+			user_mem_check_addr = ((uintptr_t)va>(uintptr_t)p)?(uintptr_t)va:(uintptr_t)p;	//for buggyhello2
+			return -E_FAULT;
+		}
+	}	
+	return 0;
+}
+
+//
+// Checks that environment 'env' is allowed to access the range
+// of memory [va, va+len) with permissions 'perm | PTE_U | PTE_P'.
+// If it can, then the function simply returns.
+// If it cannot, 'env' is destroyed and, if env is the current
+// environment, this function will not return.
+//
+void
+user_mem_assert(struct Env *env, const void *va, size_t len, int perm)
+{
+	if (user_mem_check(env, va, len, perm | PTE_U) < 0) {
+		cprintf("[%08x] user_mem_check assertion failure for "
+			"va %08x\n", env->env_id, user_mem_check_addr);
+		env_destroy(env);	// may not return
+	}
+}
+
 
 // --------------------------------------------------------------
 // Checking functions.
@@ -688,7 +766,7 @@ static void
 check_page_free_list(bool only_low_memory)
 {
 	struct Page *pp;
-	int pdx_limit = only_low_memory ? 1 : NPDENTRIES;
+	unsigned pdx_limit = only_low_memory ? 1 : NPDENTRIES;
 	int nfree_basemem = 0, nfree_extmem = 0;
 	char *first_free_page;
 
@@ -840,6 +918,10 @@ check_kern_pgdir(void)
 	for (i = 0; i < n; i += PGSIZE)
 		assert(check_va2pa(pgdir, UPAGES + i) == PADDR(pages) + i);
 
+	// check envs array (new test for lab 3)
+	n = ROUNDUP(NENV*sizeof(struct Env), PGSIZE);
+	for (i = 0; i < n; i += PGSIZE)
+		assert(check_va2pa(pgdir, UENVS + i) == PADDR(envs) + i);
 
 	// check phys mem
 	for (i = 0; i < npages * PGSIZE; i += PGSIZE)
@@ -856,6 +938,7 @@ check_kern_pgdir(void)
 		case PDX(UVPT):
 		case PDX(KSTACKTOP-1):
 		case PDX(UPAGES):
+		case PDX(UENVS):
 			assert(pgdir[i] & PTE_P);
 			break;
 		default:

@@ -16,4 +16,8 @@ int mon_help(int argc, char **argv, struct Trapframe *tf);
 int mon_kerninfo(int argc, char **argv, struct Trapframe *tf);
 int mon_backtrace(int argc, char **argv, struct Trapframe *tf);
 int mon_time(int argc, char **argv, struct Trapframe *tf);
+int mon_db_c(int argc, char **argv, struct Trapframe *tf);
+int mon_db_si(int argc, char **argv, struct Trapframe *tf);
+int mon_db_x(int argc, char **argv, struct Trapframe *tf);
+
 #endif	// !JOS_KERN_MONITOR_H
