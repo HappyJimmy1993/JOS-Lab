@@ -1,0 +1,28 @@
+lab2练习答案也可在lab2.pdf中查看。
+1.由于这段代码实在kernel中运行，而运行到kernel时使用的已经为虚拟地址，因此我认为x应为uintptr_t类型。
+
+2.
+Entry	Base Virtual Address	Points to (logically):
+1023	0xFFC00000	Page table for top 4MB of phys memory
+1022	0xFF800000	Page table for next 4MB of phys memory
+…	…	…
+960	0xF0000000	KERNBASE
+959	0xEFC00000	VPT
+958	0xEF800000	ULIM
+957	0xEF400000	UVPT
+956	0xEF000000	UPAGES
+955	0xEEC00000	UTOP
+…	…	…
+2	0x00800000	UTEXT
+1	0x00400000	UTEMP
+0	0x00000000	0
+
+3、因为在页表中使用了权限保护，用户只能访问PTE_U位为1的项。当用户需要访问内存地址时，会在虚拟地址翻译的时候进行检验，如果是只能kernel访问，则访问会被拒绝。
+
+4、因为remapped physical memory为从0xF0000000-0xFFFFFFFF,共256MB。
+
+5、使用1个page directory以及1024个page table即能映射4G的物理内存，所需的内存空间为(1+1024)*4K=4M+4K，总共需要4MB+4KB的空间。
+
+6、在relocated之后。 
+因为在初始时虚拟地址的0-4M和KERNBASE到KERNBASE+4M都映射到了物理地址的0-4M的空间。
+因为loader不能直接载入extended mem。
